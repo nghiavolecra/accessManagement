@@ -1,0 +1,243 @@
+// -------------------- Prisma Client + Datasource --------------------
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -------------------- Enums --------------------
+enum ResourceType {
+  physical
+  digital
+  system
+}
+
+enum SecurityLevel {
+  low
+  medium
+  high
+  critical
+}
+
+enum RequestStatus {
+  pending
+  approved
+  rejected
+  expired
+}
+
+enum EmploymentType {
+  full_time
+  part_time
+  contractor
+}
+
+// -------------------- Core Models --------------------
+model User {
+  id           String  @id @default(uuid())
+  email        String  @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  employeeId   String? @unique
+  department   String?
+  position     String?
+  phone        String?
+  isActive     Boolean @default(true)
+
+  accessLevel  String?      // mức quyền (tùy bạn định nghĩa)
+  lastLogin    DateTime?    // lần đăng nhập gần nhất
+  employmentType EmploymentType?
+
+  // Relations (RBAC, logs, requests, tokens)
+  roles                   UserRole[]
+  auditLogs               AuditLog[]
+  accessRequestsRequested AccessRequest[] @relation("RequestedBy")
+  accessRequestsApproved  AccessRequest[] @relation("ApprovedBy")
+  refreshTokens           RefreshToken[]
+
+  // Dashboard data relations
+  absences                Absence[]
+  overtimes               Overtime[]
+  trainings               TrainingParticipant[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  parent   Role?   @relation("RoleHierarchy", fields: [parentId], references: [id])
+  parentId String?
+  children Role[]  @relation("RoleHierarchy")
+}
+
+model Permission {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  resource    String
+  action      String
+  description String?
+
+  roles RolePermission[]
+}
+
+model UserRole {
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+  role   Role   @relation(fields: [roleId], references: [id])
+  roleId String
+
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  role         Role       @relation(fields: [roleId], references: [id])
+  roleId       String
+  permission   Permission @relation(fields: [permissionId], references: [id])
+  permissionId String
+
+  @@id([roleId, permissionId])
+}
+
+model Resource {
+  id             String        @id @default(uuid())
+  name           String
+  type           ResourceType
+  location       String?
+  securityLevel  SecurityLevel
+  accessSchedule Json?
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+
+  auditLogs      AuditLog[]
+  accessRequests AccessRequest[]
+}
+
+model AccessRequest {
+  id          String @id @default(uuid())
+
+  requester   User   @relation("RequestedBy", fields: [requesterId], references: [id])
+  requesterId String
+
+  resource    Resource @relation(fields: [resourceId], references: [id])
+  resourceId  String
+
+  purpose   String
+  startDate DateTime
+  endDate   DateTime
+  status    RequestStatus @default(pending)
+
+  approver   User?     @relation("ApprovedBy", fields: [approverId], references: [id])
+  approverId String?
+  approvedAt DateTime?
+
+  createdAt  DateTime @default(now())
+
+  @@index([requesterId])
+  @@index([resourceId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id         String    @id @default(uuid())
+  user       User?     @relation(fields: [userId], references: [id])
+  userId     String?
+  resource   Resource? @relation(fields: [resourceId], references: [id])
+  resourceId String?
+  action     String
+  ipAddress  String?
+  userAgent  String?
+  success    Boolean
+  details    Json?
+  createdAt  DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([resourceId])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// -------------------- Dashboard Data Models --------------------
+// Ghi nhận vắng mặt theo ngày/giờ
+model Absence {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+
+  date      DateTime          // ngày vắng
+  hours     Int               // số giờ vắng (8h = 1 ngày)
+  type      String?
+  approved  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
+  @@index([date])
+}
+
+// Ghi nhận OT theo ngày/giờ
+model Overtime {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+
+  date      DateTime          // ngày làm OT
+  hours     Int               // số giờ OT
+  approved  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
+  @@index([date])
+}
+
+// Khóa đào tạo theo phiên (chi phí/returns)
+model TrainingSession {
+  id        String   @id @default(uuid())
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  cost      Int                  // nên lưu cents để tránh float
+  returns   Int?                 // cents (ROI thu về, nếu có)
+  createdAt DateTime @default(now())
+
+  participants TrainingParticipant[]
+
+  @@index([startDate])
+  @@index([endDate])
+}
+
+// Bảng trung gian: ai tham gia khóa nào
+model TrainingParticipant {
+  training   TrainingSession @relation(fields: [trainingId], references: [id])
+  trainingId String
+  user       User            @relation(fields: [userId], references: [id])
+  userId     String
+
+  @@id([trainingId, userId])
+  @@index([userId])
+}

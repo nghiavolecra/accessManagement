@@ -1,0 +1,32 @@
+{
+  "name": "access-mgmt",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n WEB,API -c blue,green \"pnpm --filter web dev\" \"pnpm --filter api dev\"",
+    "build": "pnpm -r build",
+    "start": "pnpm --filter api start",
+    "format": "pnpm -r prettier --write .",
+    "lint": "pnpm -r eslint ."
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/morgan": "^1.9.10",
+    "@types/node": "^24.2.1",
+    "@types/swagger-ui-express": "^4.1.8",
+    "concurrently": "^9.0.0",
+    "prettier": "^3.3.3",
+    "prisma": "^6.13.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.13.0",
+    "date-fns": "^4.1.0",
+    "express-rate-limit": "^8.0.1",
+    "swagger-ui-express": "^5.0.1"
+  }
+}

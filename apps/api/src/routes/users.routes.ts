@@ -1,0 +1,14 @@
+import { Router } from "express";
+import { authenticate } from "../middleware/auth";
+import { authorize } from "../middleware/rbac";
+import * as c from "../controllers/users.controller";
+const r = Router();
+r.use(authenticate);
+r.get("/", authorize("Admin", "Manager"), c.list);
+r.post("/", authorize("Admin"), c.create);
+r.get("/:id", authorize("Admin", "Manager"), c.get);
+r.put("/:id", authorize("Admin"), c.update);
+r.delete("/:id", authorize("Admin"), c.remove);
+r.post("/:id/roles", c.assignRole);
+r.delete("/:id/roles/:roleId", c.unassignRole);
+export default r;
